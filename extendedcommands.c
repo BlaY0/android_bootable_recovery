@@ -857,6 +857,13 @@ void show_advanced_menu()
                                              "2048M",
                                              NULL };
 
+                static char* ext2_sizes[] = { "0M",
+                                              "128M",
+                                              "256M",
+                                              "384M",
+                                              "512M",
+                                              NULL };
+
                 static char* swap_sizes[] = { "0M",
                                               "32M",
                                               "64M",
@@ -864,11 +871,16 @@ void show_advanced_menu()
                                               "256M",
                                               NULL };
 
-                static char* ext_headers[] = { "Ext Size", "", NULL };
+                static char* ext_headers[] = { "1st EXT Size", "", NULL };
+                static char* ext2_headers[] = { "2nd EXT Size", "", NULL };
                 static char* swap_headers[] = { "Swap Size", "", NULL };
 
                 int ext_size = get_menu_selection(ext_headers, ext_sizes, 0, 0);
                 if (ext_size == GO_BACK)
+                    continue;
+
+                int ext2_size = get_menu_selection(ext2_headers, ext2_sizes, 0, 0);
+                if (ext2_size == GO_BACK)
                     continue;
 
                 int swap_size = get_menu_selection(swap_headers, swap_sizes, 0, 0);
@@ -882,7 +894,7 @@ void show_advanced_menu()
                 sddevice[strlen("/dev/block/mmcblkX")] = NULL;
                 char cmd[PATH_MAX];
                 setenv("SDPATH", sddevice, 1);
-                sprintf(cmd, "sdparted -es %s -ss %s -efs ext3 -s", ext_sizes[ext_size], swap_sizes[swap_size]);
+                sprintf(cmd, "sdparted -es %s -e2s %s -ss %s -efs ext3 -s", ext_sizes[ext_size], ext2_sizes[ext2_size], swap_sizes[swap_size]);
                 ui_print("Partitioning SD Card... please wait...\n");
                 if (0 == __system(cmd))
                     ui_print("Done!\n");

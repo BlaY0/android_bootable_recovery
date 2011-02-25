@@ -13,7 +13,7 @@ ShowHelp() {
 
 cat <<DONEHELP
 
-$SCRIPTNAME v$SCRIPTREV created by $MYNAME
+$SCRIPTNAME v${SCRIPTREV}${SCRIPTEXTRAREV} created by $MYNAME
 
 if you use this script in your work, please give some credit. thanks.
 
@@ -26,14 +26,17 @@ options:
 
  --fatsize|-fs SIZE[MG]     set the size of the fat32 partition to <SIZE>.
                             default=total sdcard size - (ext + swap)
-						
+
  --extsize|-es SIZE[MG]     set the size of the ext partition to <SIZE>.
                             default=$EXTSIZE
-						
+
+ --ext2size|-e2s SIZE[MG]   set the size of the second ext partition to <SIZE>.
+                            default=$EXT2SIZE
+
  --swapsize|-ss SIZE[MG]    set the size of the swap partition to <SIZE>.
                             if set to 0, no swap partition will be created.
                             default=$SWAPSIZE
-						
+
  --extfs|-efs TYPE          set the filesystem of ext partition to <TYPE>.
                             valid types=ext2, ext3, ext4
                             default=$EXTFS
@@ -49,7 +52,7 @@ options:
                             cannot be used with any partition creation options.
                             valid types=ext2
 
-							
+
  --interactive|-i           interactive mode
 
  --help|-h                  display this help
@@ -96,6 +99,7 @@ UnmountAll () {
 	echo -n "unmounting all partitions..."
 	umount "$FATPATH" > /dev/null 2>&1 >>"$LOGFILE"
 	umount "$EXTPATH" > /dev/null 2>&1 >>"$LOGFILE"
+	umount "$EXT2PATH" > /dev/null 2>&1 >>"$LOGFILE"
 	umount "$SWAPPATH" > /dev/null 2>&1 >>"$LOGFILE"
 	echo "done"
 	echo
@@ -193,9 +197,10 @@ CalculatePartitions() {
 	# get size of sdcard in MB & do some math
 	SDSIZEMB=`"$CMPARTED" "$SDPATH" unit MB print | grep $SDPATH | cut -d" " -f3`
 	SDSIZE=${SDSIZEMB%MB}
-	[ -n "$FATSIZE" ] || FATSIZE=$(($SDSIZE - $EXTSIZE - $SWAPSIZE))
+	[ -n "$FATSIZE" ] || FATSIZE=$(($SDSIZE - $EXTSIZE - $EXT2SIZE - $SWAPSIZE))
 	EXTEND=$(($FATSIZE + $EXTSIZE))
-	SWAPEND=$(($EXTEND + $SWAPSIZE))
+	EXT2END=$(($EXTEND + $EXT2SIZE))
+	SWAPEND=$(($EXT2END + $SWAPSIZE))
 	
 	# check for fatsize of 0
 	[ $FATSIZE -le 0 ] && ShowError "must have a fat32 partition greater than 0MB"
@@ -206,7 +211,7 @@ CalculatePartitions() {
 	[ -z "$SDSIZE" ] && ShowError "zero-length argument passed to partition-calculator"
 	
 	# make sure we're not being asked to do the impossible
-	[ $(($FATSIZE + $EXTSIZE + $SWAPSIZE)) -gt $SDSIZE ] && [ -z "$IMODE" ] && ShowError "sum of requested partitions is greater than sdcard size"
+	[ $(($FATSIZE + $EXTSIZE + $EXT2SIZE + $SWAPSIZE)) -gt $SDSIZE ] && [ -z "$IMODE" ] && ShowError "sum of requested partitions is greater than sdcard size"
 
 }
 
@@ -282,6 +287,7 @@ ShowActions() {
 	echo "the following actions will be performed:"
 	echo " -create $FATSIZE""MB fat32 partition"
 	[ $EXTSIZE -gt 0 ] && echo " -create $EXTSIZE""MB ext2 partition"
+	[ $EXT2SIZE -gt 0 ] && echo " -create $EXT2SIZE""MB ext2 partition"
 	[ $SWAPSIZE -gt 0 ] && echo " -create $SWAPSIZE""MB swap partition"
 	[ "$EXTFS" != "ext2" ] && echo " -ext2 partition will be upgraded to $EXTFS"
 	echo
@@ -331,9 +337,20 @@ PartitionSdCard() {
 		echo "done"
 	fi
 	
+	if [ $EXT2SIZE -gt 0 ] ; then
+		echo -n "creating second ext2 partition..."
+		"$CMPARTED" -s "$SDPATH" mkpartfs primary ext2 "$EXTEND"MB "$EXT2END"MB 2>&1 >>"$LOGFILE"
+		"$CMTUNE2FS" -L sd-ext2 "$EXT2PATH" 2>&1 >>"$LOGFILE"
+		EXTENDEND=$EXT2END
+		echo "done"
+	else
+		EXTENDEND=$EXTEND
+		SWAPPATH=$SDPATH"p3"
+	fi
+	
 	if [ $SWAPSIZE -gt 0 ] ; then
 		echo -n "creating swap partition..."
-		"$CMPARTED" -s "$SDPATH" mkpartfs primary linux-swap "$EXTEND"MB "$SWAPEND"MB 2>&1 >>"$LOGFILE"
+		"$CMPARTED" -s "$SDPATH" mkpartfs primary linux-swap "$EXTENDEND"MB "$SWAPEND"MB 2>&1 >>"$LOGFILE"
 		echo "done"
 	fi
 	echo
@@ -349,25 +366,36 @@ UpgradeExt() {
 
 	# have to use -m switch for this check b/c parted incorrectly
 	# reports all ext partitions as ext2 when running print <number>
-	CHECKEXTFS=`"$CMPARTED" -m "$SDPATH" print | grep ext | cut -d":" -f5`
-	[ "$CHECKEXTFS" == "$1" ] && ShowError "$EXTPATH is already $1"
+	CHECKEXTFS=`"$CMPARTED" -m "$SDPATH" print | grep ext | head -n 1 | cut -d":" -f5`
+	[ "$CHECKEXTFS" == "$1" ] && ShowError "EXT partitions are already formatted as $1"
+
+	# check whether second EXT partition is actually present
+	"$CMPARTED" -m "$SDPATH" print | grep -q ^3.*:ext && EXT2EXISTS="yes"
 
 	# grabbed the code bits for ext3 from upgrade_fs(credit:cyanogen)
 	# check for ext2...must upgrade to ext3 first b4 ext4
 	if [ "$1" == "ext3" -o "$1" == "ext4" ] ; then
-		echo -n "adding journaling to $EXTPATH..."
+		echo -n "adding journaling to EXT partitions..."
 		umount /system/sd > /dev/null 2>&1 >>"$LOGFILE"
 		"$CME2FSCK" -p "$EXTPATH" 2>&1 >>"$LOGFILE"
 		"$CMTUNE2FS" -c0 -i0 -j "$EXTPATH" 2>&1 >>"$LOGFILE"
+		if [ "$EXT2EXISTS" == "yes" ] ; then
+			"$CME2FSCK" -p "$EXT2PATH" 2>&1 >>"$LOGFILE"
+			"$CMTUNE2FS" -c0 -i0 -j "$EXT2PATH" 2>&1 >>"$LOGFILE"
+		fi
 		echo "done"
 	fi
 
 	# and got convert to ext4 from xda-forum(credit:Denkai)
 	if [ "$1" == "ext4" ] ; then
-		echo -n "converting $EXTPATH to ext4 filesystem..."
+		echo -n "converting EXT partitions to ext4 format..."
 		umount /system/sd > /dev/null 2>&1 >>"$LOGFILE"
 		"$CMTUNE2FS" -O extents,uninit_bg,dir_index "$EXTPATH" 2>&1 >>"$LOGFILE"
 		"$CME2FSCK" -fpDC0 "$EXTPATH" 2>&1 >>"$LOGFILE"
+		if [ "$EXT2EXISTS" == "yes" ] ; then
+			"$CMTUNE2FS" -O extents,uninit_bg,dir_index "$EXT2PATH" 2>&1 >>"$LOGFILE"
+			"$CME2FSCK" -fpDC0 "$EXT2PATH" 2>&1 >>"$LOGFILE"
+		fi
 		echo "done"
 	fi
 	echo
@@ -381,9 +409,12 @@ DowngradeExt() {
 
 	# have to use print for this check b/c parted incorrectly
 	# reports all ext partitions as ext2 when running print <number>
-	CHECKEXTFS=`"$CMPARTED" -m "$SDPATH" print | grep ext | cut -d":" -f5`
-	[ "$CHECKEXTFS" == "$1" ] && ShowError "$EXTPATH is already $1"
+	CHECKEXTFS=`"$CMPARTED" -m "$SDPATH" print | grep ext | head -n 1 | cut -d":" -f5`
+	[ "$CHECKEXTFS" == "$1" ] && ShowError "EXT partitions are already formatted as $1"
 	
+	# check whether second EXT partition is actually present
+	"$CMPARTED" -m "$SDPATH" print | grep -q ^3.*:ext && EXT2EXISTS="yes"
+
 	if [ "$CHECKEXTFS" == "ext4" -o "$1" == "ext3" ] ; then
 		# interweb says downgrading from ext4 is not possible
 		# without a backup/restore procedure.
@@ -396,6 +427,10 @@ DowngradeExt() {
 		umount /system/sd > /dev/null 2>&1 >>"$LOGFILE"
 		"$CMTUNE2FS" -O ^has_journal "$EXTPATH" 2>&1 >>"$LOGFILE"
 		"$CME2FSCK" -fp "$EXTPATH" 2>&1 >>"$LOGFILE"
+		if [ "$EXT2EXISTS" == "yes" ] ; then
+			"$CMTUNE2FS" -O ^has_journal "$EXT2PATH" 2>&1 >>"$LOGFILE"
+			"$CME2FSCK" -fp "$EXT2PATH" 2>&1 >>"$LOGFILE"
+		fi
 		echo "done"
 	fi
 	echo
@@ -420,6 +455,12 @@ DONEINSTRUCT
 	CalculatePartitions
 	
 	GetSwapSize
+	
+	FATSIZE=
+	
+	CalculatePartitions
+	
+	GetExt2Size
 	
 	FATSIZE=
 	
@@ -482,6 +523,29 @@ GetExtSize() {
 	
 }
 
+GetExt2Size() {
+
+	EXT2TEST=
+	
+	while [ -z "$EXT2TEST" ]
+	do
+		echo
+		echo -n "second ext partition size [default=$EXT2SIZE]: "
+		read EXT2RESP
+		
+		[ -z "$EXT2RESP" ] && EXT2RESP="$EXT2SIZE"
+		echo "$EXT2RESP" > /dev/null 2>&1 >>"$LOGFILE"
+		
+		ValidateSizeArg "$EXT2RESP"
+		EXT2TEST="$FUNC_RET"
+		
+		[ -n "$EXT2TEST" ] && [ $EXT2TEST -gt $(($SDSIZE - $SWAPSIZE - $EXTSIZE)) ] && ShowMessage "$EXT2RESP > available space($(($SDSIZE - $SWAPSIZE - $EXTSIZE))M)." && EXT2TEST=
+	done
+	
+	EXT2SIZE=$EXT2TEST
+	
+}
+
 GetExtType() {
 
 	FSTEST=
@@ -519,7 +583,7 @@ GetFatSize() {
 		ValidateSizeArg "$FATRESP"
 		FATTEST="$FUNC_RET"
 		
-		[ -n "$FATTEST" ] && [ $FATTEST -gt $FATSIZE ] && ShowMessage "$FATRESP > available space($(($SDSIZE - $SWAPSIZE - $EXTSIZE))M)." && FATTEST=
+		[ -n "$FATTEST" ] && [ $FATTEST -gt $FATSIZE ] && ShowMessage "$FATRESP > available space($(($SDSIZE - $SWAPSIZE - $EXT2SIZE - $EXTSIZE))M)." && FATTEST=
 		[ -n "$FATTEST" ] && [ $FATTEST -le 0 ] && ShowMessage "must have a fat32 partition greater than 0MB" && FATTEST=
 	done
 	
@@ -530,6 +594,7 @@ GetFatSize() {
 
 SCRIPTNAME="sdparted"
 SCRIPTREV="0.6"
+SCRIPTEXTRAREV="-B1"
 MYNAME="51dusty"
 
 IMODE=
@@ -562,9 +627,14 @@ EXTFS="ext2"
 EXTPATH=$SDPATH"p2"
 EXTEND=
 
+EXT2SIZE=0
+EXT2FS="ext2"
+EXT2PATH=$SDPATH"p3"
+EXT2END=
+
 SWAPSIZE=32
 SWAPTYPE="linux-swap"
-SWAPPATH=$SDPATH"p3"
+SWAPPATH=$SDPATH"p4"
 SWAPEND=
 
 CMPARTED="/sbin/parted"
@@ -583,6 +653,7 @@ while [ $# -gt 0 ] ; do
     
     -fs|--fatsize) shift ; ValidateSizeArg "$1" ; FATSIZE="$FUNC_RET" ; CREATEPART="$1" ;;
     -es|--extsize) shift ; ValidateSizeArg "$1" ; EXTSIZE="$FUNC_RET" ; CREATEPART="$1" ;;
+    -e2s|--ext2size) shift ; ValidateSizeArg "$1" ; EXT2SIZE="$FUNC_RET" ; CREATEPART="$1" ;;
 	-ss|--swapsize) shift ; ValidateSizeArg "$1" ; SWAPSIZE="$FUNC_RET" ; CREATEPART="$1" ;;
 	-efs|--extfs) shift ; ValidateExtArg "$1" ; EXTFS="$FUNC_RET" ; CREATEPART="$1" ;;
 	
