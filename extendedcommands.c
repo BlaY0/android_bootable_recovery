@@ -849,12 +849,12 @@ void show_advanced_menu()
             }
             case 5:
             {
-                static char* ext_sizes[] = { "128M",
-                                             "256M",
+                static char* ext_sizes[] = { "256M",
+                                             "384M",
                                              "512M",
+                                             "768M",
                                              "1024M",
                                              "2048M",
-                                             "4096M",
                                              NULL };
 
                 static char* swap_sizes[] = { "0M",
