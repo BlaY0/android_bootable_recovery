@@ -195,8 +195,8 @@ ValidateSizeArg() {
 CalculatePartitions() {
 
 	# get size of sdcard in MB & do some math
-	SDSIZEMB=`"$CMPARTED" "$SDPATH" unit MB print | grep $SDPATH | cut -d" " -f3`
-	SDSIZE=${SDSIZEMB%MB}
+	SDSIZES=`"$CMPARTED" "$SDPATH" unit s print | grep $SDPATH | cut -d" " -f3`
+	SDSIZE=$((${SDSIZES%s} / 2048))
 	[ -n "$FATSIZE" ] || FATSIZE=$(($SDSIZE - $EXTSIZE - $EXT2SIZE - $SWAPSIZE))
 	EXTEND=$(($FATSIZE + $EXTSIZE))
 	EXT2END=$(($EXTEND + $EXT2SIZE))
@@ -282,7 +282,7 @@ PrepareSdCard() {
 ShowActions() {
 
 	echo
-	echo "total size of sdcard=$SDSIZEMB"
+	echo "total size of sdcard=${SDSIZE}MB"
 	echo
 	echo "the following actions will be performed:"
 	echo " -create $FATSIZE""MB fat32 partition"
@@ -326,20 +326,20 @@ PartitionSdCard() {
 	
 	if [ $FATSIZE -gt 0 ] ; then
 		echo -n "creating fat32 partition..."
-		"$CMPARTED" -s "$SDPATH" mkpartfs primary fat32 0 "$FATSIZE"MB 2>&1 >>"$LOGFILE"
+		"$CMPARTED" -s "$SDPATH" mkpartfs primary fat32 256s $(($FATSIZE * 2048 - 1))s 2>&1 >>"$LOGFILE"
 		echo "done"
 	fi
 	
 	if [ $EXTSIZE -gt 0 ] ; then
 		echo -n "creating ext2 partition..."
-		"$CMPARTED" -s "$SDPATH" mkpartfs primary ext2 "$FATSIZE"MB "$EXTEND"MB 2>&1 >>"$LOGFILE"
+		"$CMPARTED" -s "$SDPATH" mkpartfs primary ext2 $(($FATSIZE * 2048))s $(($EXTEND * 2048 - 1))s 2>&1 >>"$LOGFILE"
 		"$CMTUNE2FS" -L sd-ext "$EXTPATH" 2>&1 >>"$LOGFILE"
 		echo "done"
 	fi
 	
 	if [ $EXT2SIZE -gt 0 ] ; then
 		echo -n "creating second ext2 partition..."
-		"$CMPARTED" -s "$SDPATH" mkpartfs primary ext2 "$EXTEND"MB "$EXT2END"MB 2>&1 >>"$LOGFILE"
+		"$CMPARTED" -s "$SDPATH" mkpartfs primary ext2 $(($EXTEND * 2048))s $(($EXT2END * 2048 - 1))s 2>&1 >>"$LOGFILE"
 		"$CMTUNE2FS" -L sd-ext2 "$EXT2PATH" 2>&1 >>"$LOGFILE"
 		EXTENDEND=$EXT2END
 		echo "done"
@@ -350,7 +350,7 @@ PartitionSdCard() {
 	
 	if [ $SWAPSIZE -gt 0 ] ; then
 		echo -n "creating swap partition..."
-		"$CMPARTED" -s "$SDPATH" mkpartfs primary linux-swap "$EXTENDEND"MB "$SWAPEND"MB 2>&1 >>"$LOGFILE"
+		"$CMPARTED" -s "$SDPATH" mkpartfs primary linux-swap $(($EXTENDEND * 2048))s $(($SWAPEND * 2048 - 1))s 2>&1 >>"$LOGFILE"
 		echo "done"
 	fi
 	echo
@@ -610,7 +610,6 @@ TTISLOOP=
 TTISMSDOS=
 
 SDSIZE=
-SDSIZEMB=
 if [ -z "$SDPATH" ]
 then
     SDPATH="/dev/block/mmcblk0"
