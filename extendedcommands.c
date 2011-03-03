@@ -729,6 +729,238 @@ void show_nandroid_advanced_restore_menu()
     }
 }
 
+void show_nandroid_advanced_backup_menu()
+{
+    if (ensure_path_mounted("/sdcard") != 0) {
+        LOGE ("Can't mount /sdcard\n");
+        return;
+    }
+
+    static char* headers[] = {  "Nandroid Advanced Backup",
+                                "",
+                                NULL
+    };
+
+    static char* list[] = { "Backup boot",
+                            "Backup system",
+                            "Backup data",
+                            "Backup cache",
+                            "Backup sd-ext",
+                            NULL
+    };
+
+    int chosen_item = get_menu_selection(headers, list, 0, 0);
+    switch (chosen_item)
+    {
+        case 0:
+            {
+                    ui_set_background(BACKGROUND_ICON_INSTALLING);
+
+                    char backup_path[PATH_MAX];
+                    time_t t = time(NULL);
+                    struct tm *tmp = localtime(&t);
+                    if (tmp == NULL)
+                    {
+                        struct timeval tp;
+                        gettimeofday(&tp, NULL);
+                        sprintf(backup_path, "/sdcard/clockworkmod/backup/%d", tp.tv_sec);
+                    }
+                    else
+                    {
+                        strftime(backup_path, sizeof(backup_path), "/sdcard/clockworkmod/backup/%F.%H.%M.%S", tmp);
+                    }
+
+                    char mkd[PATH_MAX];
+                    sprintf(mkd, "mkdir -p %s", backup_path);
+                    __system(mkd);
+
+                    if (0 != nandroid_backup_partition(backup_path, "/boot"))
+                        return;
+
+                    char md5[PATH_MAX];
+                    ui_print("Generating md5 sum...\n");
+                    sprintf(md5, "nandroid-md5.sh %s", backup_path);
+                    if (0 != __system(md5)) {
+                        ui_print("Error while generating md5 sum!\n");
+                        return;
+                    }
+
+                    sync();
+                    ui_set_background(BACKGROUND_ICON_NONE);
+                    ui_reset_progress();
+                    ui_print("\nBackup complete!\n");
+            }
+            break;
+        case 1:
+            {
+                    ui_set_background(BACKGROUND_ICON_INSTALLING);
+
+                    char backup_path[PATH_MAX];
+                    time_t t = time(NULL);
+                    struct tm *tmp = localtime(&t);
+                    if (tmp == NULL)
+                    {
+                        struct timeval tp;
+                        gettimeofday(&tp, NULL);
+                        sprintf(backup_path, "/sdcard/clockworkmod/backup/%d", tp.tv_sec);
+                    }
+                    else
+                    {
+                        strftime(backup_path, sizeof(backup_path), "/sdcard/clockworkmod/backup/%F.%H.%M.%S", tmp);
+                    }
+
+                    char mkd[PATH_MAX];
+                    sprintf(mkd, "mkdir -p %s", backup_path);
+                    __system(mkd);
+
+                    if (0 != nandroid_backup_partition(backup_path, "/system"))
+                        return;
+
+                    char md5[PATH_MAX];
+                    ui_print("Generating md5 sum...\n");
+                    sprintf(md5, "nandroid-md5.sh %s", backup_path);
+                    if (0 != __system(md5)) {
+                        ui_print("Error while generating md5 sum!\n");
+                        return;
+                    }
+
+                    sync();
+                    ui_set_background(BACKGROUND_ICON_NONE);
+                    ui_reset_progress();
+                    ui_print("\nBackup complete!\n");
+            }
+            break;
+        case 2:
+            {
+                    ui_set_background(BACKGROUND_ICON_INSTALLING);
+
+                    char backup_path[PATH_MAX];
+                    time_t t = time(NULL);
+                    struct tm *tmp = localtime(&t);
+                    if (tmp == NULL)
+                    {
+                        struct timeval tp;
+                        gettimeofday(&tp, NULL);
+                        sprintf(backup_path, "/sdcard/clockworkmod/backup/%d", tp.tv_sec);
+                    }
+                    else
+                    {
+                        strftime(backup_path, sizeof(backup_path), "/sdcard/clockworkmod/backup/%F.%H.%M.%S", tmp);
+                    }
+
+                    char mkd[PATH_MAX];
+                    sprintf(mkd, "mkdir -p %s", backup_path);
+                    __system(mkd);
+
+                    if (0 != nandroid_backup_partition(backup_path, "/data"))
+                        return;
+
+                    char md5[PATH_MAX];
+                    ui_print("Generating md5 sum...\n");
+                    sprintf(md5, "nandroid-md5.sh %s", backup_path);
+                    if (0 != __system(md5)) {
+                        ui_print("Error while generating md5 sum!\n");
+                        return;
+                    }
+
+                    sync();
+                    ui_set_background(BACKGROUND_ICON_NONE);
+                    ui_reset_progress();
+                    ui_print("\nBackup complete!\n");
+            }
+            break;
+        case 3:
+            {
+                    ui_set_background(BACKGROUND_ICON_INSTALLING);
+
+                    char backup_path[PATH_MAX];
+                    time_t t = time(NULL);
+                    struct tm *tmp = localtime(&t);
+                    if (tmp == NULL)
+                    {
+                        struct timeval tp;
+                        gettimeofday(&tp, NULL);
+                        sprintf(backup_path, "/sdcard/clockworkmod/backup/%d", tp.tv_sec);
+                    }
+                    else
+                    {
+                        strftime(backup_path, sizeof(backup_path), "/sdcard/clockworkmod/backup/%F.%H.%M.%S", tmp);
+                    }
+
+                    char mkd[PATH_MAX];
+                    sprintf(mkd, "mkdir -p %s", backup_path);
+                    __system(mkd);
+
+                   if (0 != nandroid_backup_partition_extended(backup_path, "/cache", 0))
+                       return;
+
+                    char md5[PATH_MAX];
+                    ui_print("Generating md5 sum...\n");
+                    sprintf(md5, "nandroid-md5.sh %s", backup_path);
+                    if (0 != __system(md5)) {
+                        ui_print("Error while generating md5 sum!\n");
+                        return;
+                    }
+
+                    sync();
+                    ui_set_background(BACKGROUND_ICON_NONE);
+                    ui_reset_progress();
+                    ui_print("\nBackup complete!\n");
+            }
+            break;
+        case 4:
+            {
+                    ui_set_background(BACKGROUND_ICON_INSTALLING);
+
+                    char backup_path[PATH_MAX];
+                    time_t t = time(NULL);
+                    struct tm *tmp = localtime(&t);
+                    if (tmp == NULL)
+                    {
+                        struct timeval tp;
+                        gettimeofday(&tp, NULL);
+                        sprintf(backup_path, "/sdcard/clockworkmod/backup/%d", tp.tv_sec);
+                    }
+                    else
+                    {
+                        strftime(backup_path, sizeof(backup_path), "/sdcard/clockworkmod/backup/%F.%H.%M.%S", tmp);
+                    }
+
+                    char mkd[PATH_MAX];
+                    sprintf(mkd, "mkdir -p %s", backup_path);
+                    __system(mkd);
+
+                    struct stat st;
+                    Volume *vol = volume_for_path("/sd-ext");
+                    if (vol == NULL || 0 != stat(vol->device, &st))
+                    {
+                        ui_print("No sd-ext found. Skipping backup of sd-ext.\n");
+                    }
+                    else
+                    {
+                        if (0 != ensure_path_mounted("/sd-ext"))
+                            ui_print("Could not mount sd-ext. sd-ext backup may not be supported on this device. Skipping backup of sd-ext.\n");
+                        else if (0 != nandroid_backup_partition(backup_path, "/sd-ext"))
+                            return;
+                    }
+
+                    char md5[PATH_MAX];
+                    ui_print("Generating md5 sum...\n");
+                    sprintf(md5, "nandroid-md5.sh %s", backup_path);
+                    if (0 != __system(md5)) {
+                        ui_print("Error while generating md5 sum!\n");
+                        return;
+                    }
+
+                    sync();
+                    ui_set_background(BACKGROUND_ICON_NONE);
+                    ui_reset_progress();
+                    ui_print("\nBackup complete!\n");
+            }
+            break;
+    }
+}
+
 void show_nandroid_menu()
 {
     static char* headers[] = {  "Nandroid",
@@ -738,6 +970,7 @@ void show_nandroid_menu()
 
     static char* list[] = { "Backup",
                             "Restore",
+                            "Advanced Backup",
                             "Advanced Restore",
                             NULL
     };
@@ -767,6 +1000,9 @@ void show_nandroid_menu()
             show_nandroid_restore_menu();
             break;
         case 2:
+            show_nandroid_advanced_backup_menu();
+            break;
+        case 3:
             show_nandroid_advanced_restore_menu();
             break;
     }
